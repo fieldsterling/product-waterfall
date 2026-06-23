@@ -1,0 +1,48 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+
+const pages = await getCollection('pages');
+const about = pages.find((p) => p.id === 'about');
+
+if (!about) {
+  return Astro.redirect('/404');
+}
+
+const { Content } = await render(about);
+---
+
+<BaseLayout title="关于我们">
+  <header class="page-header">
+    <a href="/" class="back-btn" aria-label="返回">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <h1 class="page-title">关于我们</h1>
+  </header>
+
+  <main class="page-main">
+    <div class="page-content">
+      <Content />
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  .page-header {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; gap: 8px; height: 48px;
+    padding: 0 12px; background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .back-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; color: var(--text); }
+  .page-title { font-size: 15px; font-weight: 600; }
+  .page-main { max-width: 720px; margin: 0 auto; padding: 0; }
+  .page-content { padding: 16px; background: var(--card-bg); font-size: 15px; line-height: 1.8; color: var(--text); word-break: break-word; }
+  .page-content :global(h2) { font-size: 17px; font-weight: 600; margin: 20px 0 10px; }
+  .page-content :global(h2):first-child { margin-top: 0; }
+  .page-content :global(h3) { font-size: 15px; font-weight: 600; margin: 16px 0 8px; }
+  .page-content :global(p) { margin-bottom: 12px; }
+  .page-content :global(p):last-child { margin-bottom: 0; }
+  .page-content :global(ul), .page-content :global(ol) { padding-left: 20px; margin-bottom: 12px; }
+  .page-content :global(li) { margin-bottom: 4px; }
+</style>

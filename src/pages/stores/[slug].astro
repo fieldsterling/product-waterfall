@@ -1,0 +1,380 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+import { IMAGE_BASE } from '../../site-config';
+
+export async function getStaticPaths() {
+  const stores = await getCollection('stores');
+  return stores.map((s) => ({ params: { slug: s.id } }));
+}
+
+const { slug } = Astro.params;
+const stores = await getCollection('stores');
+const store = stores.find((s) => s.id === slug);
+
+if (!store) {
+  return Astro.redirect('/404');
+}
+
+const { Content } = await render(store);
+
+// 获取该门店下的所有产品
+const allProducts = await getCollection('products');
+const storeProducts = allProducts.filter((p) => p.data.store === store.data.name);
+
+const pageUrl = Astro.url.toString();
+const rawOgImage = store.data.images.length > 0 ? store.data.images[0] : undefined;
+const ogImage = rawOgImage
+  ? (rawOgImage.startsWith('http') ? rawOgImage : IMAGE_BASE + rawOgImage.replace(/^\//, ''))
+  : undefined;
+
+const storeJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: store.data.name,
+  ...(store.data.address && { address: { '@type': 'PostalAddress', streetAddress: store.data.address } }),
+  ...(store.data.phone && { telephone: store.data.phone }),
+  ...(ogImage && { image: ogImage }),
+  ...(store.data.closed && { openingHours: 'Closed' }),
+};
+---
+
+<BaseLayout title={`${store.data.name} - 门店详情`} description={`${store.data.name} - ${store.data.address}`} ogImage={ogImage} ogUrl={pageUrl}>
+  <script type="application/ld+json" set:html={JSON.stringify(storeJsonLd)}></script>
+  <header class="detail-header">
+    <a href="javascript:history.back()" class="back-btn" aria-label="返回">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <h1 class="detail-title">
+      {store.data.name}
+      {store.data.closed && <span class="closed-badge">已闭店</span>}
+    </h1>
+    <button class="share-btn" id="shareBtn" aria-label="分享">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    </button>
+  </header>
+
+  <main class="detail-main">
+    {
+      store.data.images.length > 0 && (
+        <div class="store-images">
+          {store.data.images.map((img) => (
+            <img src={img && (img.startsWith('http') ? img : IMAGE_BASE + img.replace(/^\//, ''))} alt={store.data.name} loading="lazy" />
+          ))}
+        </div>
+      )
+    }
+
+    <div class="store-meta">
+      {
+        store.data.tags.length > 0 && (
+          <div class="meta-row">
+            <span class="meta-label">标签</span>
+            <div class="tags">
+              {store.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+            </div>
+          </div>
+        )
+      }
+      {store.data.address && (
+        <div class="meta-row">
+          <span class="meta-label">地址</span>
+          <span class="meta-value">{store.data.address}</span>
+        </div>
+      )}
+      {store.data.phone && (
+        <div class="meta-row">
+          <span class="meta-label">电话</span>
+          <a href={`tel:${store.data.phone}`} class="meta-value meta-link">{store.data.phone}</a>
+        </div>
+      )}
+      {store.data.wechat && (
+        <div class="meta-row">
+          <span class="meta-label">微信</span>
+          <span class="meta-value">{store.data.wechat}</span>
+        </div>
+      )}
+    </div>
+
+    <div class="store-description">
+      <Content />
+    </div>
+
+    <div class="store-products">
+      <h2 class="section-title">本店产品</h2>
+      {storeProducts.length > 0 ? (
+        <div class="waterfall">
+          {storeProducts.map((product) => (
+            <a href={`/products/${product.id}/`} class="card">
+              <div class="card-img">
+                <img src={product.data.image && (product.data.image.startsWith('http') ? product.data.image : IMAGE_BASE + product.data.image.replace(/^\//, ''))} alt={product.data.title} loading="lazy" />
+              </div>
+              <div class="card-body">
+                <h3 class="card-title">{product.data.title}</h3>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="no-product">暂无产品</p>
+      )}
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  .detail-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 12px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    color: var(--text);
+  }
+
+  .detail-title {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .share-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0;
+    color: var(--text-secondary); background: none; border: none; cursor: pointer; padding: 0;
+  }
+
+  .closed-badge {
+    font-size: 10px;
+    font-weight: 500;
+    color: #e74c3c;
+    background: #fde8e8;
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .detail-main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0;
+  }
+
+  .store-images {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    background: #eee;
+  }
+
+  .store-images::-webkit-scrollbar {
+    display: none;
+  }
+
+  .store-images img {
+    width: 100%;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    object-fit: cover;
+    max-height: 280px;
+  }
+
+  .store-meta {
+    padding: 14px 16px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .meta-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .meta-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .meta-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 32px;
+  }
+
+  .meta-value {
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .meta-link {
+    color: #2b6cb0;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg);
+    border-radius: 4px;
+  }
+
+  .store-description {
+    padding: 16px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+
+  .store-description :global(h1),
+  .store-description :global(h2),
+  .store-description :global(h3) {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 16px 0 8px;
+  }
+
+  .store-description :global(h1):first-child,
+  .store-description :global(h2):first-child,
+  .store-description :global(h3):first-child {
+    margin-top: 0;
+  }
+
+  .store-description :global(p) {
+    margin-bottom: 12px;
+  }
+
+  .store-description :global(p):last-child {
+    margin-bottom: 0;
+  }
+
+  .store-description :global(ul),
+  .store-description :global(ol) {
+    padding-left: 20px;
+    margin-bottom: 12px;
+  }
+
+  .store-description :global(li) {
+    margin-bottom: 4px;
+  }
+
+  .store-products {
+    padding: 16px;
+  }
+
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+
+  .waterfall {
+    column-count: 2;
+    column-gap: 10px;
+  }
+
+  .card {
+    display: block;
+    break-inside: avoid;
+    margin-bottom: 10px;
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.2s;
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-hover);
+  }
+
+  .card-img {
+    width: 100%;
+    background: #eee;
+  }
+
+  .card-img img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .card-body {
+    padding: 8px 10px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .no-product {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 20px;
+    font-size: 14px;
+  }
+</style>
+
+<script>
+  function handleShare() {
+    var title = document.title;
+    var url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: title, url: url }).catch(function() {});
+    } else {
+      navigator.clipboard.writeText(title + ' ' + url).then(function() {
+        alert('链接已复制到剪贴板');
+      }).catch(function() {
+        alert('复制失败，请手动复制链接: ' + url);
+      });
+    }
+  }
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    var shareBtn = document.getElementById('shareBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', handleShare);
+      shareBtn.addEventListener('touchstart', handleShare);
+    }
+  });
+</script>

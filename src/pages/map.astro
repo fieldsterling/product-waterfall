@@ -1,0 +1,223 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+
+const allStores = await getCollection('stores');
+
+// 过滤有坐标的门店，按坐标分组
+const buildingMap = new Map<string, {
+  lat: number;
+  lng: number;
+  address: string;
+  stores: Array<{
+    id: string;
+    name: string;
+    floor: string;
+    closed: boolean;
+    tags: string[];
+  }>;
+}>();
+
+allStores.forEach((s) => {
+  if (s.data.lat == null || s.data.lng == null) return;
+  const key = `${s.data.lat},${s.data.lng}`;
+  if (!buildingMap.has(key)) {
+    buildingMap.set(key, {
+      lat: s.data.lat,
+      lng: s.data.lng,
+      address: s.data.address,
+      stores: [],
+    });
+  }
+  buildingMap.get(key)!.stores.push({
+    id: s.id,
+    name: s.data.name,
+    floor: s.data.floor,
+    closed: s.data.closed,
+    tags: s.data.tags,
+  });
+});
+
+// 按楼层排序
+buildingMap.forEach((b) => {
+  b.stores.sort((a, b) => {
+    const wa = floorWeight(a.floor);
+    const wb = floorWeight(b.floor);
+    return wa - wb;
+  });
+});
+
+function floorWeight(f: string): number {
+  if (!f) return 999;
+  const m = f.match(/^B(\d+)$/i);
+  if (m) return -parseInt(m[1]);
+  const m2 = f.match(/^(\d+)F$/i);
+  if (m2) return parseInt(m2[1]);
+  return 998;
+}
+
+const buildings = [...buildingMap.values()];
+const centerLat = buildings.length > 0
+  ? buildings.reduce((s, b) => s + b.lat, 0) / buildings.length
+  : 22.5665;
+const centerLng = buildings.length > 0
+  ? buildings.reduce((s, b) => s + b.lng, 0) / buildings.length
+  : 114.1245;
+---
+
+<BaseLayout title="门店地图">
+  <a href="/" class="back-link" aria-label="返回">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+  </a>
+  <div id="map"></div>
+
+  <div id="buildingPanel" class="building-panel">
+    <div class="panel-header">
+      <span id="panelTitle"></span>
+      <button id="closePanelBtn" class="close-btn">&times;</button>
+    </div>
+    <div class="panel-content" id="panelContent"></div>
+  </div>
+</BaseLayout>
+
+<style>
+  html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+  #map { width: 100%; height: 100%; }
+
+  .back-link {
+    position: absolute; top: 12px; left: 12px; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px;
+    background: white; border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    text-decoration: none; color: #333;
+  }
+
+  .building-panel {
+    position: fixed; top: 0; right: 0; width: 100%; max-width: 360px; height: 100%;
+    background: white; box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+    z-index: 2000; display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.3s ease;
+  }
+  .building-panel.open { transform: translateX(0); }
+
+  .panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; border-bottom: 1px solid #eee;
+    font-size: 16px; font-weight: 600;
+  }
+  .close-btn {
+    background: none; border: none; font-size: 24px; cursor: pointer;
+    line-height: 1; color: #666; padding: 0 4px;
+  }
+  .panel-content { flex: 1; overflow-y: auto; padding: 0; }
+
+  .floor-accordion { border-bottom: 1px solid #f1f1f1; }
+  .floor-accordion:last-child { border-bottom: none; }
+  .floor-header {
+    background: #f8f9fa; padding: 12px 16px;
+    font-weight: 600; font-size: 14px;
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    user-select: none;
+  }
+  .floor-header::after { content: '▼'; font-size: 11px; transition: transform 0.2s; color: #999; }
+  .floor-accordion.collapsed .floor-header::after { transform: rotate(-90deg); }
+  .floor-accordion.collapsed .store-list { display: none; }
+
+  .store-list { background: white; padding: 0; margin: 0; list-style: none; }
+  .store-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-bottom: 1px solid #f5f5f5;
+    text-decoration: none; color: #333; font-size: 14px;
+  }
+  .store-item:last-child { border-bottom: none; }
+  .store-name { flex: 1; }
+  .store-name.closed { color: #999; }
+  .closed-badge { font-size: 10px; color: #e74c3c; margin-left: 4px; }
+  .store-tags { font-size: 11px; color: #999; margin-top: 2px; }
+  .store-arrow { color: #ccc; flex-shrink: 0; }
+
+  @media (max-width: 640px) {
+    .building-panel { max-width: 100%; }
+  }
+</style>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+
+<script define:vars={{ buildings, centerLat, centerLng }}>
+  // 默认中心（深圳IBC），地理定位成功后会被覆盖
+  var defaultLat = centerLat;
+  var defaultLng = centerLng;
+  var map = L.map('map').setView([defaultLat, defaultLng], 15);
+
+  L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+    subdomains: ['1', '2', '3', '4'],
+    maxZoom: 19,
+  }).addTo(map);
+
+  // 尝试获取浏览者位置
+  function locateUser() {
+    // 先尝试浏览器原生定位（最准）
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function(pos) {
+          map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+        },
+        function() {
+          // 用户拒绝，用IP定位
+          locateByIP();
+        },
+        { timeout: 5000, maximumAge: 600000 }
+      );
+    } else {
+      locateByIP();
+    }
+  }
+
+  function locateByIP() {
+    fetch('https://ipapi.co/json/')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.latitude && data.longitude) {
+          map.setView([data.latitude, data.longitude], 13);
+        }
+      })
+      .catch(function() {});
+  }
+
+  locateUser();
+
+  var panel = document.getElementById('buildingPanel');
+  var panelTitle = document.getElementById('panelTitle');
+  var panelContent = document.getElementById('panelContent');
+  var closePanelBtn = document.getElementById('closePanelBtn');
+
+  closePanelBtn.addEventListener('click', function() { panel.classList.remove('open'); });
+  map.on('click', function() { if (panel.classList.contains('open')) panel.classList.remove('open'); });
+
+  function floorLabel(f) { return f || '--'; }
+
+  function renderBuilding(building) {
+    panelTitle.textContent = building.address;
+    var html = '';
+    building.stores.forEach(function(s) {
+      html += '<a href="/stores/' + s.id + '/" class="store-item">'
+        + '<span class="store-name' + (s.closed ? ' closed' : '') + '">'
+        + s.name + (s.closed ? '<span class="closed-badge">已闭店</span>' : '')
+        + '<div class="store-tags">' + floorLabel(s.floor) + (s.tags.length ? ' · ' + s.tags.slice(0, 3).join(' · ') : '') + '</div>'
+        + '</span>'
+        + '<span class="store-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>'
+        + '</a>';
+    });
+    panelContent.innerHTML = html;
+    panel.classList.add('open');
+  }
+
+  buildings.forEach(function(b) {
+    var marker = L.marker([b.lat, b.lng]).addTo(map);
+    marker.bindTooltip(b.address, { direction: 'top', offset: [0, -10] });
+    marker.on('click', function() { renderBuilding(b); });
+  });
+</script>

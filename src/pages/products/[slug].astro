@@ -1,0 +1,310 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+import { IMAGE_BASE } from '../../site-config';
+
+export async function getStaticPaths() {
+  const products = await getCollection('products');
+  return products.map((p) => ({ params: { slug: p.id } }));
+}
+
+const { slug } = Astro.params;
+const products = await getCollection('products');
+const product = products.find((p) => p.id === slug);
+
+if (!product) {
+  return Astro.redirect('/404');
+}
+
+const { Content } = await render(product);
+
+const stores = await getCollection('stores');
+const storeEntry = stores.find((s) => s.data.name === product.data.store);
+const API_BASE = import.meta.env.PROD ? '/.netlify/functions' : 'http://localhost:8888/.netlify/functions';
+
+const pageUrl = Astro.url.toString();
+const description = `${product.data.title} - ${product.data.category}`;
+
+const resolvedImage = product.data.image
+  ? (product.data.image.startsWith('http') ? product.data.image : IMAGE_BASE + product.data.image.replace(/^\//, ''))
+  : '';
+const priceText = (product.data.priceMin != null && product.data.priceMax != null)
+  ? `¥${product.data.priceMin} - ¥${product.data.priceMax}`
+  : (product.data.priceMin != null ? `¥${product.data.priceMin}起` : '');
+
+// 猜你喜欢：按标签重合度排序，取前4个
+const relatedProducts = products
+  .filter((p) => p.id !== product.id)
+  .map((p) => {
+    const overlap = p.data.tags.filter((t) => product.data.tags.includes(t)).length;
+    return { ...p, overlap };
+  })
+  .sort((a, b) => b.overlap - a.overlap)
+  .slice(0, 4);
+
+// JSON-LD
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: product.data.title,
+  description: description,
+  image: resolvedImage,
+  category: product.data.category,
+  ...(product.data.code && { sku: product.data.code }),
+  ...(product.data.priceMin != null || product.data.priceMax != null ? {
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'CNY',
+      ...(product.data.priceMin != null && { price: product.data.priceMin }),
+      ...(product.data.priceMax != null && { highPrice: product.data.priceMax }),
+      availability: 'https://schema.org/InStock',
+    }
+  } : {}),
+};
+---
+
+<BaseLayout title={`${product.data.title} - 产品详情`} description={description} ogImage={resolvedImage} ogUrl={pageUrl}>
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)}></script>
+  <header class="detail-header">
+    <a href="/" class="back-btn" aria-label="返回">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </a>
+    <h1 class="detail-title">{product.data.title}</h1>
+    <button class="share-btn" id="shareBtn" aria-label="分享">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
+  </header>
+
+  <main class="detail-main">
+    <div class="detail-image">
+      <img src={resolvedImage} alt={product.data.title} />
+      <button class="detail-like-btn" id="likeBtn" data-product-id={product.id}>
+        <svg class="detail-like-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+        <span class="detail-like-count" id="likeCount">0</span>
+      </button>
+    </div>
+
+    <div class="detail-meta">
+      {priceText && (
+        <div class="meta-row meta-price">{priceText}</div>
+      )}
+      {product.data.code && (
+        <div class="meta-row meta-code">
+          <span class="meta-label">编号</span>
+          <span class="meta-value mono">{product.data.code}</span>
+        </div>
+      )}
+      {
+        product.data.tags.length > 0 && (
+          <div class="meta-row">
+            <span class="meta-label">标签</span>
+            <div class="tags">
+              {product.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+            </div>
+          </div>
+        )
+      }
+      <div class="meta-row">
+        <span class="meta-label">分类</span>
+        <span class="meta-value">{product.data.category}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">门店</span>
+        {storeEntry ? (
+          <a href={`/stores/${storeEntry.id}/`} class="meta-value meta-link">
+            {product.data.store}
+          </a>
+        ) : (
+          <span class="meta-value">{product.data.store}</span>
+        )}
+      </div>
+    </div>
+
+    <div class="detail-content">
+      <Content />
+    </div>
+
+    <div class="comment-section">
+      <h2 class="comment-title">留言</h2>
+      <form id="commentForm" class="comment-form">
+        <input type="text" name="name" placeholder="称呼（必填）" required class="comment-input" />
+        <input type="tel" name="phone" placeholder="手机号" class="comment-input" />
+        <input type="text" name="wechat" placeholder="微信号" class="comment-input" />
+        <textarea name="content" placeholder="留言内容（必填）" required class="comment-textarea" rows="3"></textarea>
+        <button type="submit" class="comment-submit">提交留言</button>
+        <p class="comment-msg" id="commentMsg"></p>
+      </form>
+      <p class="comment-wx">或直接咨询客服微信：shuibei_jewelry</p>
+    </div>
+
+    {relatedProducts.length > 0 && (
+      <div class="related-section">
+        <h2 class="related-title">猜你喜欢</h2>
+        <div class="related-grid">
+          {relatedProducts.map((rp) => (
+            <a href={`/products/${rp.id}/`} class="related-card">
+              <div class="related-img">
+                <img src={rp.data.image && (rp.data.image.startsWith('http') ? rp.data.image : IMAGE_BASE + rp.data.image.replace(/^\//, ''))} alt={rp.data.title} loading="lazy" />
+              </div>
+              <div class="related-body">
+                <h3 class="related-name">{rp.data.title}</h3>
+                {(rp.data.priceMin != null || rp.data.priceMax != null) && (
+                  <span class="related-price">
+                    {rp.data.priceMin != null && rp.data.priceMax != null
+                      ? `¥${rp.data.priceMin} - ¥${rp.data.priceMax}`
+                      : rp.data.priceMin != null ? `¥${rp.data.priceMin}起` : ''}
+                  </span>
+                )}
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+  </main>
+</BaseLayout>
+
+<style>
+  .detail-header { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; background: var(--card-bg); border-bottom: 1px solid var(--border); }
+  .back-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; color: var(--text); }
+  .detail-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .share-btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; color: var(--text-secondary); background: none; border: none; cursor: pointer; padding: 0; }
+  .detail-main { max-width: 720px; margin: 0 auto; padding: 0; }
+
+  .detail-image { width: 100%; background: #eee; position: relative; }
+  .detail-image img { width: 100%; height: auto; display: block; }
+
+  .detail-like-btn { position: absolute; bottom: 10px; right: 10px; display: flex; align-items: center; gap: 4px; padding: 6px 12px; border: none; border-radius: 20px; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: #fff; cursor: pointer; font-size: 13px; transition: background 0.2s; }
+  .detail-like-btn.liked { background: rgba(231,76,60,0.7); }
+  .detail-like-btn.liked .detail-like-icon { fill: #fff; }
+  .detail-like-count { font-weight: 500; min-width: 16px; text-align: center; }
+
+  .detail-meta { padding: 14px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border); }
+  .meta-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .meta-row:last-child { margin-bottom: 0; }
+  .meta-label { font-size: 13px; color: var(--text-muted); flex-shrink: 0; min-width: 32px; }
+  .meta-value { font-size: 14px; color: var(--text); }
+  .meta-link { color: #2b6cb0; }
+  .meta-price { font-size: 18px; font-weight: 600; color: #e74c3c; margin-bottom: 10px; }
+  .meta-code .mono { font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px; color: var(--text-secondary); }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { display: inline-block; padding: 2px 8px; font-size: 12px; color: var(--text-secondary); background: var(--bg); border-radius: 4px; }
+
+  .detail-content { padding: 16px; background: var(--card-bg); font-size: 15px; line-height: 1.8; color: var(--text); word-break: break-word; }
+  .detail-content :global(h1), .detail-content :global(h2), .detail-content :global(h3) { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+  .detail-content :global(h1):first-child, .detail-content :global(h2):first-child, .detail-content :global(h3):first-child { margin-top: 0; }
+  .detail-content :global(p) { margin-bottom: 12px; }
+  .detail-content :global(p):last-child { margin-bottom: 0; }
+  .detail-content :global(img) { max-width: 100%; border-radius: 4px; margin: 12px 0; }
+  .detail-content :global(ul), .detail-content :global(ol) { padding-left: 20px; margin-bottom: 12px; }
+  .detail-content :global(li) { margin-bottom: 4px; }
+  .detail-content :global(blockquote) { border-left: 3px solid var(--border); padding-left: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+  .detail-content :global(hr) { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .detail-content :global(table) { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .detail-content :global(th), .detail-content :global(td) { border: 1px solid var(--border); padding: 6px 10px; font-size: 14px; }
+  .detail-content :global(th) { background: var(--bg); font-weight: 600; }
+
+  .comment-section { padding: 20px 16px; background: var(--card-bg); margin-top: 12px; }
+  .comment-title { font-size: 16px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+  .comment-form { display: flex; flex-direction: column; gap: 10px; }
+  .comment-input { height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); }
+  .comment-input:focus { border-color: var(--primary); }
+  .comment-textarea { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); resize: vertical; font-family: inherit; }
+  .comment-textarea:focus { border-color: var(--primary); }
+  .comment-submit { height: 42px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 15px; cursor: pointer; }
+  .comment-submit:active { opacity: 0.85; }
+  .comment-submit:disabled { background: #999; cursor: not-allowed; }
+  .comment-msg { font-size: 13px; text-align: center; min-height: 20px; }
+  .comment-msg.success { color: #27ae60; }
+  .comment-msg.error { color: #e74c3c; }
+  .comment-wx { font-size: 13px; color: var(--text-muted); text-align: center; margin-top: 12px; }
+
+  .related-section { padding: 20px 16px; background: var(--card-bg); margin-top: 12px; }
+  .related-title { font-size: 16px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+  .related-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .related-card { display: block; background: var(--bg); border-radius: var(--radius); overflow: hidden; }
+  .related-img { width: 100%; background: #eee; }
+  .related-img img { width: 100%; height: auto; display: block; aspect-ratio: 1; object-fit: cover; }
+  .related-body { padding: 8px 10px; }
+  .related-name { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .related-price { display: block; font-size: 13px; font-weight: 600; color: #e74c3c; margin-top: 4px; }
+</style>
+
+<script define:vars={{ apiBase: API_BASE, productId: product.id }}>
+  // 浏览量（后台记录，不显示在页面）
+  fetch(apiBase + '/view', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productId: productId }),
+  }).catch(function() {});
+
+  // 分享
+  function handleShare() {
+    var title = document.title;
+    var url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: title, url: url }).catch(function() {});
+    } else {
+      navigator.clipboard.writeText(title + ' ' + url).then(function() {
+        alert('链接已复制到剪贴板');
+      }).catch(function() {
+        alert('复制失败，请手动复制链接: ' + url);
+      });
+    }
+  }
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    var shareBtn = document.getElementById('shareBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', handleShare);
+      shareBtn.addEventListener('touchstart', handleShare);
+    }
+  });
+
+  // 点赞
+  var likeBtn = document.getElementById('likeBtn');
+  var likeCount = document.getElementById('likeCount');
+  function fetchLikeCount() {
+    var stored = localStorage.getItem('detail_like_' + productId);
+    if (stored) { likeCount.textContent = stored; likeBtn.classList.add('liked'); }
+  }
+  likeBtn.addEventListener('click', function() {
+    fetch(apiBase + '/like', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: productId }),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (data.error) return;
+      likeCount.textContent = data.count;
+      if (data.liked) { likeBtn.classList.add('liked'); localStorage.setItem('detail_like_' + productId, String(data.count)); }
+      else { likeBtn.classList.remove('liked'); localStorage.removeItem('detail_like_' + productId); }
+    }).catch(function() {});
+  });
+  fetchLikeCount();
+
+  // 留言
+  var commentForm = document.getElementById('commentForm');
+  var commentMsg = document.getElementById('commentMsg');
+  commentForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var btn = commentForm.querySelector('.comment-submit');
+    btn.disabled = true; btn.textContent = '提交中...';
+    commentMsg.className = 'comment-msg'; commentMsg.textContent = '';
+    fetch(apiBase + '/comment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        productId: productId,
+        name: commentForm.querySelector('[name="name"]').value,
+        phone: commentForm.querySelector('[name="phone"]').value,
+        wechat: commentForm.querySelector('[name="wechat"]').value,
+        content: commentForm.querySelector('[name="content"]').value,
+      }),
+    }).then(function(r) { return r.json(); }).then(function(result) {
+      if (result.success) { commentMsg.textContent = '留言提交成功！'; commentMsg.className = 'comment-msg success'; commentForm.reset(); }
+      else { commentMsg.textContent = result.error || '提交失败'; commentMsg.className = 'comment-msg error'; }
+    }).catch(function() {
+      commentMsg.textContent = '网络错误，请重试'; commentMsg.className = 'comment-msg error';
+    }).finally(function() { btn.disabled = false; btn.textContent = '提交留言'; });
+  });
+</script>

@@ -1,0 +1,14 @@
+{
+  "weights": {
+    "interest": 0.5,
+    "boost": 0.3,
+    "random": 0.2
+  },
+  "behavior": {
+    "clickWeight": 1,
+    "likeWeight": 2
+  },
+  "pagination": {
+    "pageSize": 20
+  }
+}

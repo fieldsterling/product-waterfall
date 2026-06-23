@@ -1,0 +1,361 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+
+const allProducts = await getCollection('products');
+const productMap: Record<string, string> = {};
+const productCodeMap: Record<string, string> = {};
+allProducts.forEach((p) => {
+  productMap[p.id] = p.data.title;
+  productCodeMap[p.id] = p.data.code || '';
+});
+
+const API_BASE = import.meta.env.PROD ? '/.netlify/functions' : 'http://localhost:8888/.netlify/functions';
+---
+
+<BaseLayout title="管理">
+  <div id="loginBox" class="login-box">
+    <h2 class="login-title">管理后台</h2>
+    <input type="password" id="tokenInput" class="login-input" placeholder="请输入管理密码" />
+    <button id="loginBtn" class="login-btn">进入</button>
+    <p class="login-msg" id="loginMsg"></p>
+  </div>
+
+  <div id="contentBox" class="content-box" style="display:none">
+    <header class="admin-header">
+      <div class="admin-tabs">
+        <button class="tab-btn active" id="tabProducts">产品</button>
+        <button class="tab-btn" id="tabComments">留言</button>
+        <button class="tab-btn" id="tabAnnouncement">公告</button>
+      </div>
+      <span class="admin-count" id="adminCount"></span>
+    </header>
+
+    <div class="admin-nav">
+      <a href="/admin/products/" class="nav-link">编辑产品</a>
+      <a href="/admin/stores/" class="nav-link">编辑门店</a>
+    </div>
+
+    <!-- 产品流量/点赞 -->
+    <div class="product-stats" id="productStats">
+      <div class="stats-table-wrap">
+        <table class="stats-table">
+          <thead>
+            <tr>
+              <th>产品名称</th>
+              <th>产品编号</th>
+              <th>浏览量</th>
+              <th>点赞量</th>
+            </tr>
+          </thead>
+          <tbody id="statsBody">
+            <tr><td colspan="4" class="stats-loading">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 留言列表 -->
+    <div class="admin-list" id="commentList" style="display:none"></div>
+
+    <!-- 公告编辑 -->
+    <div class="announce-editor" id="announceEditor" style="display:none">
+      <div class="form-group">
+        <label class="form-label">公告文字</label>
+        <input type="text" id="announceText" class="form-input" placeholder="输入公告内容，留空则不显示" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">跳转链接（可选）</label>
+        <input type="text" id="announceLink" class="form-input" placeholder="https://..." />
+      </div>
+      <div class="form-actions">
+        <button id="announceClear" class="action-btn action-btn-secondary">清除公告</button>
+        <button id="announceSave" class="action-btn action-btn-primary">保存公告</button>
+      </div>
+      <p class="form-msg" id="announceMsg"></p>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .login-box {
+    max-width: 360px; margin: 80px auto 0; padding: 32px 20px;
+    background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .login-title { font-size: 18px; font-weight: 600; text-align: center; margin-bottom: 20px; }
+  .login-input { width: 100%; height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 15px; outline: none; }
+  .login-input:focus { border-color: var(--primary); }
+  .login-btn { width: 100%; height: 44px; margin-top: 14px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 16px; cursor: pointer; }
+  .login-btn:active { opacity: 0.85; }
+  .login-msg { font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; color: #e74c3c; }
+
+  .admin-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .admin-tabs { display: flex; gap: 4px; }
+  .tab-btn {
+    padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text-secondary); font-size: 13px; cursor: pointer;
+  }
+  .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .admin-count { font-size: 13px; color: var(--text-muted); }
+  .admin-nav { display: flex; gap: 8px; padding: 10px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border); }
+  .nav-link { padding: 5px 14px; font-size: 13px; color: var(--primary); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none; }
+  .admin-list { padding: 0; }
+
+  .comment-card {
+    padding: 14px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .comment-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .comment-product { font-weight: 600; color: var(--primary); font-size: 13px; }
+  .comment-time { font-size: 12px; color: var(--text-muted); }
+  .comment-content { color: var(--text); line-height: 1.6; margin-bottom: 8px; word-break: break-word; }
+  .comment-contact { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+  .comment-contact span { display: flex; align-items: center; gap: 3px; }
+  .contact-label { color: var(--text-muted); }
+
+  .product-stats { padding: 0; }
+  .stats-table-wrap { overflow-x: auto; }
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .stats-table th { background: var(--bg); font-weight: 600; padding: 10px 12px; text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  .stats-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .stats-table tbody tr { background: var(--card-bg); }
+  .stats-table tbody tr:hover { background: var(--bg); }
+  .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .stats-loading { text-align: center; color: var(--text-muted); padding: 40px !important; }
+  .stats-empty { text-align: center; color: var(--text-muted); padding: 40px !important; }
+
+  .announce-editor { padding: 16px; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+  .form-input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); }
+  .form-input:focus { border-color: var(--primary); }
+  .form-actions { display: flex; gap: 10px; }
+  .action-btn { flex: 1; height: 42px; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; }
+  .action-btn-primary { background: var(--primary); color: #fff; }
+  .action-btn-secondary { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
+  .form-msg { font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+  .form-msg.success { color: #27ae60; }
+  .form-msg.error { color: #e74c3c; }
+</style>
+
+<script define:vars={{ apiBase: API_BASE, productMap: JSON.stringify(productMap), productCodeMap: JSON.stringify(productCodeMap) }}>
+  var tokenInput = document.getElementById('tokenInput');
+  var loginBtn = document.getElementById('loginBtn');
+  var loginMsg = document.getElementById('loginMsg');
+  var loginBox = document.getElementById('loginBox');
+  var contentBox = document.getElementById('contentBox');
+  var adminCount = document.getElementById('adminCount');
+
+  // 尝试从 sessionStorage 恢复 token
+  var savedToken = sessionStorage.getItem('admin_token');
+  if (savedToken) {
+    loadAll(savedToken);
+  }
+
+  loginBtn.addEventListener('click', function() {
+    var token = tokenInput.value.trim();
+    if (!token) { loginMsg.textContent = '请输入密码'; return; }
+    loginBtn.disabled = true;
+    loginBtn.textContent = '验证中...';
+    loadAll(token);
+  });
+
+  tokenInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loginBtn.click();
+  });
+
+  function loadAll(token) {
+    fetch(apiBase + '/comments?token=' + encodeURIComponent(token))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) {
+          loginBox.style.display = 'block';
+          contentBox.style.display = 'none';
+          loginMsg.textContent = '密码错误';
+          loginBtn.disabled = false;
+          loginBtn.textContent = '进入';
+          sessionStorage.removeItem('admin_token');
+          return;
+        }
+        sessionStorage.setItem('admin_token', token);
+        loginBox.style.display = 'none';
+        contentBox.style.display = 'block';
+        renderComments(data);
+        loginBtn.disabled = false;
+        loginBtn.textContent = '进入';
+        // 加载产品统计
+        loadProductStats(token);
+      })
+      .catch(function() {
+        loginMsg.textContent = '网络错误，请重试';
+        loginBtn.disabled = false;
+        loginBtn.textContent = '进入';
+      });
+  }
+
+  // ===== 产品统计 =====
+  var productMapObj = JSON.parse(productMap);
+  var productCodeMapObj = JSON.parse(productCodeMap);
+
+  function loadProductStats(token) {
+    fetch(apiBase + '/product-stats?token=' + encodeURIComponent(token))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) return;
+        var tbody = document.getElementById('statsBody');
+        // 合并静态产品数据 + 统计数据
+        var rows = [];
+        Object.keys(productMapObj).forEach(function(id) {
+          var stat = (data || []).find(function(s) { return s.productId === id; }) || { views: 0, likes: 0 };
+          rows.push({
+            id: id,
+            title: productMapObj[id],
+            code: productCodeMapObj[id] || '-',
+            views: stat.views,
+            likes: stat.likes,
+          });
+        });
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="stats-empty">暂无产品数据</td></tr>';
+        } else {
+          tbody.innerHTML = rows.map(function(r) {
+            return '<tr>'
+              + '<td>' + escapeHtml(r.title) + '</td>'
+              + '<td>' + escapeHtml(r.code) + '</td>'
+              + '<td class="num">' + r.views + '</td>'
+              + '<td class="num">' + r.likes + '</td>'
+              + '</tr>';
+          }).join('');
+        }
+        adminCount.textContent = rows.length + ' 个产品';
+      }).catch(function() {});
+  }
+
+  // ===== 留言 =====
+  var commentList = document.getElementById('commentList');
+
+  function renderComments(comments) {
+    if (comments.length === 0) {
+      commentList.innerHTML = '<p style="text-align:center;padding:40px;color:var(--text-muted)">暂无留言</p>';
+      return;
+    }
+    commentList.innerHTML = comments.map(function(c) {
+      var productName = productMapObj[c.productId] || c.productId;
+      var time = new Date(c.time);
+      var timeStr = time.getFullYear() + '-' +
+        String(time.getMonth() + 1).padStart(2, '0') + '-' +
+        String(time.getDate()).padStart(2, '0') + ' ' +
+        String(time.getHours()).padStart(2, '0') + ':' +
+        String(time.getMinutes()).padStart(2, '0');
+      return '<div class="comment-card">'
+        + '<div class="comment-header">'
+        + '<span class="comment-product">' + escapeHtml(productName) + '</span>'
+        + '<span class="comment-time">' + timeStr + '</span>'
+        + '</div>'
+        + '<div class="comment-content">' + escapeHtml(c.content) + '</div>'
+        + '<div class="comment-contact">'
+        + '<span><span class="contact-label">称呼:</span> ' + escapeHtml(c.name || '-') + '</span>'
+        + '<span><span class="contact-label">手机:</span> ' + escapeHtml(c.phone || '-') + '</span>'
+        + '<span><span class="contact-label">微信:</span> ' + escapeHtml(c.wechat || '-') + '</span>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+    adminCount.textContent = comments.length + ' 条留言';
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ===== Tab 切换 =====
+  var tabProducts = document.getElementById('tabProducts');
+  var tabComments = document.getElementById('tabComments');
+  var tabAnnouncement = document.getElementById('tabAnnouncement');
+  var productStatsEl = document.getElementById('productStats');
+  var commentListEl = document.getElementById('commentList');
+  var announceEditor = document.getElementById('announceEditor');
+
+  var allTabs = [tabProducts, tabComments, tabAnnouncement];
+  var allPanels = [productStatsEl, commentListEl, announceEditor];
+
+  function switchTab(activeBtn, activePanel) {
+    allTabs.forEach(function(t) { t.classList.remove('active'); });
+    allPanels.forEach(function(p) { p.style.display = 'none'; });
+    activeBtn.classList.add('active');
+    activePanel.style.display = '';
+  }
+
+  tabProducts.addEventListener('click', function() {
+    switchTab(tabProducts, productStatsEl);
+    var token = sessionStorage.getItem('admin_token');
+    if (token) { loadProductStats(token); }
+  });
+  tabComments.addEventListener('click', function() {
+    switchTab(tabComments, commentListEl);
+  });
+  tabAnnouncement.addEventListener('click', function() {
+    switchTab(tabAnnouncement, announceEditor);
+    loadAnnouncement();
+  });
+
+  // ===== 公告编辑 =====
+  function loadAnnouncement() {
+    fetch(apiBase + '/announcement')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.text) {
+          document.getElementById('announceText').value = data.text;
+          document.getElementById('announceLink').value = data.link || '';
+        }
+      }).catch(function() {});
+  }
+
+  function saveAnnouncement(action) {
+    var token = sessionStorage.getItem('admin_token');
+    var body;
+    if (action === 'clear') {
+      body = { action: 'clear' };
+    } else {
+      body = {
+        text: document.getElementById('announceText').value,
+        link: document.getElementById('announceLink').value,
+      };
+    }
+    var msg = document.getElementById('announceMsg');
+    fetch(apiBase + '/announcement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify(body),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (data.success) {
+        msg.textContent = action === 'clear' ? '公告已清除' : '公告已保存';
+        msg.className = 'form-msg success';
+        if (action === 'clear') {
+          document.getElementById('announceText').value = '';
+          document.getElementById('announceLink').value = '';
+        }
+      } else {
+        msg.textContent = data.error || '操作失败';
+        msg.className = 'form-msg error';
+      }
+    }).catch(function() {
+      msg.textContent = '网络错误';
+      msg.className = 'form-msg error';
+    });
+  }
+
+  document.getElementById('announceSave').addEventListener('click', function() {
+    saveAnnouncement('save');
+  });
+  document.getElementById('announceClear').addEventListener('click', function() {
+    saveAnnouncement('clear');
+  });
+</script>

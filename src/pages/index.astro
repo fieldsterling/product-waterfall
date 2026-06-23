@@ -1,0 +1,503 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import { IMAGE_BASE } from '../site-config';
+
+const allProducts = await getCollection('products');
+
+const categories = [...new Set(allProducts.map((p) => p.data.category))].sort();
+const stores = [...new Set(allProducts.map((p) => p.data.store))].sort();
+const allTags = [...new Set(allProducts.flatMap((p) => p.data.tags))].sort();
+
+const productsData = allProducts.map((p) => ({
+  id: p.id,
+  title: p.data.title,
+  image: p.data.image,
+  category: p.data.category,
+  store: p.data.store,
+  tags: p.data.tags,
+  boost: p.data.boost,
+}));
+---
+
+<BaseLayout title="产品展示">
+  <header class="header">
+    <div class="header-inner">
+      <a href="/about/" class="logo">LOGO</a>
+      <div class="header-controls">
+        <button id="searchBtn" class="search-btn" aria-label="搜索">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
+        <button id="tagBtn" class="tag-btn" aria-label="标签筛选">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        </button>
+        <select id="categoryFilter" class="filter-select">
+          <option value="">全部分类</option>
+          {categories.map((c) => <option value={c}>{c}</option>)}
+        </select>
+        <select id="storeFilter" class="filter-select">
+          <option value="">全部门店</option>
+          {stores.map((s) => <option value={s}>{s}</option>)}
+        </select>
+        <a href="/map/" class="map-btn" title="地图">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div id="announcementBar" class="announcement-bar" style="display:none">
+    <a id="announcementLink" class="announcement-text" href="#"></a>
+  </div>
+
+  <div id="searchOverlay" class="search-overlay" style="display:none">
+    <div class="search-overlay-mask" id="searchOverlayMask"></div>
+    <div class="search-overlay-panel">
+      <div class="search-overlay-header">
+        <input type="text" id="searchInput" class="search-input" placeholder="搜索产品..." autocomplete="off" />
+        <button id="searchOverlayClose" class="search-overlay-close" aria-label="关闭">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tagOverlay" class="tag-overlay" style="display:none">
+    <div class="tag-overlay-mask" id="tagOverlayMask"></div>
+    <div class="tag-overlay-panel">
+      <div class="tag-overlay-header">
+        <span class="tag-overlay-title">选择标签</span>
+        <button id="tagOverlayClose" class="tag-overlay-close" aria-label="关闭">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="tag-overlay-body">
+        {allTags.map((tag) => (
+          <button class="tag-chip" data-tag={tag}>{tag}</button>
+        ))}
+      </div>
+      <div class="tag-overlay-footer">
+        <button id="tagReset" class="tag-reset-btn">重置</button>
+        <button id="tagConfirm" class="tag-confirm-btn">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="main" id="main">
+    <div class="waterfall" id="waterfall"></div>
+    <div class="no-result" id="noResult" style="display:none">没有找到匹配的产品</div>
+  </main>
+</BaseLayout>
+
+<style>
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--card-bg); border-bottom: 1px solid var(--border);
+    padding: 0 12px;
+  }
+  .header-inner {
+    max-width: var(--max-width); margin: 0 auto;
+    display: flex; align-items: center; gap: 8px; height: 48px;
+  }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--primary); flex-shrink: 0; white-space: nowrap; }
+  .header-controls { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  .search-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text-secondary); cursor: pointer; padding: 0;
+  }
+  .tag-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text-secondary); cursor: pointer; padding: 0;
+  }
+  .tag-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .filter-select {
+    height: 32px; padding: 0 24px 0 8px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 13px; outline: none;
+    background: var(--bg); color: var(--text);
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 6px center;
+    cursor: pointer; max-width: 90px; flex-shrink: 0;
+  }
+  .map-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--text-secondary);
+  }
+  .announcement-bar { background: #fff3cd; border-bottom: 1px solid #ffc107; padding: 0; }
+  .announcement-text {
+    display: block; max-width: var(--max-width); margin: 0 auto;
+    padding: 8px 16px; font-size: 13px; color: #856404;
+    text-align: center; text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .announcement-text.has-link { color: #2b6cb0; }
+  .main { max-width: var(--max-width); margin: 0 auto; padding: 12px; }
+  .main :global(.waterfall) { column-count: 2; column-gap: 10px; }
+  .main :global(.card) {
+    display: block; break-inside: avoid; margin-bottom: 10px;
+    background: var(--card-bg); border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow); transition: box-shadow 0.2s;
+  }
+  .main :global(.card:hover) { box-shadow: var(--shadow-hover); }
+  .main :global(.card.hidden) { display: none; }
+  .main :global(.card-img) { width: 100%; background: #eee; position: relative; }
+  .main :global(.card-img img) { width: 100%; height: auto; display: block; }
+  .main :global(.card-body) { padding: 8px 10px; }
+  .main :global(.card-title) { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+  .main :global(.like-btn) {
+    position: absolute; top: 6px; right: 6px;
+    width: 30px; height: 30px; border: none; border-radius: 50%;
+    background: rgba(255,255,255,0.85); backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; color: #999; transition: color 0.2s, transform 0.2s; z-index: 10;
+  }
+  .main :global(.like-btn:active) { transform: scale(1.2); }
+  .main :global(.like-btn.liked) { color: #e74c3c; }
+  .main :global(.like-btn.liked .like-icon) { fill: #e74c3c; }
+  .main :global(.no-result) { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 15px; }
+
+  .search-overlay { position: fixed; inset: 0; z-index: 200; }
+  .search-overlay-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+  .search-overlay-panel { position: absolute; top: 0; left: 0; right: 0; background: var(--card-bg); border-bottom: 1px solid var(--border); }
+  .search-overlay-header { display: flex; align-items: center; gap: 12px; padding: 12px; max-width: var(--max-width); margin: 0 auto; }
+  .search-overlay-header .search-input {
+    flex: 1; height: 40px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-size: 15px; outline: none; background: var(--bg); transition: border-color 0.2s;
+  }
+  .search-overlay-header .search-input:focus { border-color: var(--primary); }
+  .search-overlay-close { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: none; background: none; color: var(--text); cursor: pointer; padding: 0; }
+
+  .tag-overlay { position: fixed; inset: 0; z-index: 200; }
+  .tag-overlay-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.4); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+  .tag-overlay-panel { position: absolute; bottom: 0; left: 0; right: 0; max-height: 60vh; background: var(--card-bg); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; }
+  .tag-overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .tag-overlay-title { font-size: 15px; font-weight: 600; }
+  .tag-overlay-close { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; background: none; color: var(--text); cursor: pointer; padding: 0; }
+  .tag-overlay-body { padding: 16px; display: flex; flex-wrap: wrap; gap: 8px; overflow-y: auto; }
+  .tag-chip { padding: 6px 14px; font-size: 13px; color: var(--text-secondary); background: var(--bg); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; transition: all 0.15s; }
+  .tag-chip.selected { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .tag-overlay-footer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .tag-reset-btn { flex: 1; height: 38px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer; }
+  .tag-confirm-btn { flex: 1; height: 38px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; }
+</style>
+
+<script define:vars={{ productsData, IMAGE_BASE }}>
+  // ========== 全局变量提前声明 ==========
+  var selectedTags = [];
+
+  // ========== 配置 ==========
+  var imgBase = IMAGE_BASE;
+  var config = {
+    weights: { interest: 0.5, boost: 0.3, random: 0.2 },
+    behavior: { clickWeight: 1, likeWeight: 2 }
+  };
+
+  fetch('/recommendation-config.json')
+    .then(r => r.json())
+    .then(data => {
+      if (data?.weights) config.weights = data.weights;
+      if (data?.behavior) config.behavior = data.behavior;
+    })
+    .catch(() => {});
+
+  var allProducts = productsData;
+
+  // ========== 用户兴趣 ==========
+  var INTEREST_KEY = 'user_interest';
+  function loadInterest() {
+    try { return JSON.parse(localStorage.getItem(INTEREST_KEY)) || {}; }
+    catch(e) { return {}; }
+  }
+  function saveInterest(interest) { localStorage.setItem(INTEREST_KEY, JSON.stringify(interest)); }
+  function recordInterest(productId) {
+    var product = allProducts.find(p => p.id === productId);
+    if (!product) return;
+    var interest = loadInterest();
+    product.tags.forEach(tag => interest[tag] = (interest[tag] || 0) + config.behavior.clickWeight);
+    saveInterest(interest);
+  }
+  function recordLike(productId) {
+    var product = allProducts.find(p => p.id === productId);
+    if (!product) return;
+    var interest = loadInterest();
+    product.tags.forEach(tag => interest[tag] = (interest[tag] || 0) + config.behavior.likeWeight);
+    saveInterest(interest);
+  }
+
+  // ========== 推荐排序 ==========
+  function scoreProduct(product, interest) {
+    var tagScore = 0, maxWeight = 0;
+    for (var key in interest) if (interest[key] > maxWeight) maxWeight = interest[key];
+    if (maxWeight > 0) {
+      var matchSum = 0;
+      product.tags.forEach(tag => matchSum += (interest[tag] || 0));
+      tagScore = product.tags.length ? matchSum / (product.tags.length * maxWeight) : 0;
+    }
+    return config.weights.interest * tagScore
+      + config.weights.boost * (product.boost ? 1 : 0)
+      + config.weights.random * Math.random();
+  }
+
+  function getSortedProducts() {
+    var interest = loadInterest();
+    return allProducts.slice().sort((a, b) => scoreProduct(b, interest) - scoreProduct(a, interest));
+  }
+
+  // ========== 辅助函数 ==========
+  function escapeAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function resolveImage(path) {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return imgBase + path.replace(/^\//, '');
+  }
+
+  function createCardHTML(product) {
+    var liked = likedSet.has(product.id) ? ' liked' : '';
+    return '<a href="/products/' + product.id + '/" class="card" data-id="' + product.id + '" data-title="' + escapeAttr(product.title) + '" data-category="' + escapeAttr(product.category) + '" data-store="' + escapeAttr(product.store) + '" data-tags="' + product.tags.join('|||') + '">'
+      + '<div class="card-img">'
+      + '<img src="' + resolveImage(product.image) + '" alt="' + escapeAttr(product.title) + '" loading="lazy" />'
+      + '<button class="like-btn' + liked + '" data-like-id="' + product.id + '" aria-label="点赞">'
+      + '<svg class="like-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>'
+      + '</button>'
+      + '</div>'
+      + '<div class="card-body">'
+      + '<h2 class="card-title">' + escapeHtml(product.title) + '</h2>'
+      + '</div>'
+      + '</a>';
+  }
+
+  function bindCards(cards) {
+    cards.forEach(function(card) {
+      if (card.dataset.bound) return;
+      card.dataset.bound = '1';
+      var likeBtn = card.querySelector('.like-btn');
+      if (likeBtn) {
+        likeBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var id = this.dataset.likeId;
+          if (likedSet.has(id)) {
+            likedSet.delete(id);
+            this.classList.remove('liked');
+          } else {
+            likedSet.add(id);
+            this.classList.add('liked');
+            recordLike(id);
+          }
+          saveLikes();
+        });
+      }
+      card.addEventListener('click', function() {
+        recordInterest(card.dataset.id);
+      });
+    });
+  }
+
+  // ========== 筛选判断 ==========
+  function hasAnyFilter() {
+    var s = document.getElementById('searchInput').value.trim();
+    var c = document.getElementById('categoryFilter').value;
+    var st = document.getElementById('storeFilter').value;
+    return s !== '' || c !== '' || st !== '' || selectedTags.length > 0;
+  }
+
+  // ========== DOM 元素 ==========
+  var main = document.getElementById('main');
+  var waterfall = document.getElementById('waterfall');
+  var noResult = document.getElementById('noResult');
+
+  // ========== 清理额外轮次（筛选时使用） ==========
+  function clearExtraRounds() {
+    document.querySelectorAll('.waterfall[data-round]').forEach(el => el.remove());
+  }
+
+  // ========== 追加新轮次 ==========
+  var roundCount = 0;
+  var isLoading = false;
+
+  function appendRound(productList) {
+    if (!productList || productList.length === 0) return null;
+    roundCount++;
+    var roundDiv = document.createElement('div');
+    roundDiv.className = 'waterfall';
+    roundDiv.setAttribute('data-round', roundCount);
+
+    var html = '';
+    productList.forEach(p => html += createCardHTML(p));
+    roundDiv.innerHTML = html;
+
+    // 插入到 main 末尾（哨兵之前）
+    main.appendChild(roundDiv);
+
+    bindCards(roundDiv.querySelectorAll('.card'));
+    return roundDiv;
+  }
+
+  // ========== 渲染第一轮（或筛选后的唯一轮） ==========
+  function renderAllProducts(productList) {
+    waterfall.innerHTML = '';
+    clearExtraRounds();
+    if (!productList || productList.length === 0) {
+      noResult.style.display = 'block';
+      return;
+    }
+    noResult.style.display = 'none';
+    var html = '';
+    productList.forEach(p => html += createCardHTML(p));
+    waterfall.innerHTML = html;
+    bindCards(waterfall.querySelectorAll('.card'));
+  }
+
+  // ========== 点赞 ==========
+  var LIKES_KEY = 'product_likes';
+  function loadLikes() {
+    try { return new Set(JSON.parse(localStorage.getItem(LIKES_KEY))); }
+    catch(e) { return new Set(); }
+  }
+  function saveLikes() {
+    localStorage.setItem(LIKES_KEY, JSON.stringify(Array.from(likedSet)));
+  }
+  var likedSet = loadLikes();
+
+  // ========== 无限滚动哨兵 ==========
+  function createSentinel() {
+    var s = document.createElement('div');
+    s.className = 'sentinel';
+    s.style.height = '1px';
+    s.style.marginBottom = '20px';
+    return s;
+  }
+
+  var sentinel = createSentinel();
+  main.appendChild(sentinel);
+
+  var observer = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting && !hasAnyFilter() && !isLoading) {
+      isLoading = true;
+      var newRound = appendRound(getSortedProducts());
+      // 移动哨兵到最新轮次后面
+      main.appendChild(sentinel);
+      isLoading = false;
+    }
+  }, { rootMargin: '200px' });
+
+  // 首屏加载完成后延迟激活观察器，避免初始化误触发
+  function activateObserver() {
+    observer.observe(sentinel);
+  }
+
+  // ========== 初始加载 ==========
+  renderAllProducts(getSortedProducts());
+  setTimeout(activateObserver, 300);
+
+  // ========== 公告栏 ==========
+  fetch('/.netlify/functions/announcement')
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.text) {
+        var bar = document.getElementById('announcementBar');
+        var link = document.getElementById('announcementLink');
+        link.textContent = '📢 ' + data.text;
+        if (data.link) {
+          link.href = data.link;
+          link.classList.add('has-link');
+        } else {
+          link.removeAttribute('href');
+        }
+        bar.style.display = 'block';
+      }
+    }).catch(() => {});
+
+  // ========== 筛选逻辑 ==========
+  function filterProducts() {
+    var searchText = document.getElementById('searchInput').value.toLowerCase().trim();
+    var category = document.getElementById('categoryFilter').value;
+    var store = document.getElementById('storeFilter').value;
+
+    if (!hasAnyFilter()) {
+      // 退出筛选：恢复初始状态
+      renderAllProducts(getSortedProducts());
+      // 重新激活哨兵观察
+      observer.unobserve(sentinel);
+      main.appendChild(sentinel);
+      setTimeout(activateObserver, 300);
+      return;
+    }
+
+    // 进入筛选：清理额外轮次，显示过滤结果
+    var filtered = allProducts.filter(function(p) {
+      var matchSearch = !searchText || p.title.toLowerCase().includes(searchText);
+      var matchCategory = !category || p.category === category;
+      var matchStore = !store || p.store === store;
+      var matchTags = selectedTags.length === 0 || selectedTags.some(t => p.tags.includes(t));
+      return matchSearch && matchCategory && matchStore && matchTags;
+    });
+    renderAllProducts(filtered);
+  }
+
+  document.getElementById('searchInput').addEventListener('input', filterProducts);
+  document.getElementById('categoryFilter').addEventListener('change', filterProducts);
+  document.getElementById('storeFilter').addEventListener('change', filterProducts);
+
+  // 搜索弹层
+  var searchOverlay = document.getElementById('searchOverlay');
+  document.getElementById('searchBtn').addEventListener('click', function() {
+    searchOverlay.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('searchInput').focus(), 100);
+  });
+  document.getElementById('searchOverlayMask').addEventListener('click', function() {
+    searchOverlay.style.display = 'none';
+    document.body.style.overflow = '';
+  });
+  document.getElementById('searchOverlayClose').addEventListener('click', function() {
+    searchOverlay.style.display = 'none';
+    document.body.style.overflow = '';
+  });
+
+  // 标签弹层
+  var tagOverlay = document.getElementById('tagOverlay');
+  var tagBtn = document.getElementById('tagBtn');
+  var chips = document.querySelectorAll('.tag-chip');
+
+  function updateTagBtnState() {
+    tagBtn.classList.toggle('active', selectedTags.length > 0);
+  }
+
+  tagBtn.addEventListener('click', function() {
+    chips.forEach(chip => chip.classList.toggle('selected', selectedTags.includes(chip.dataset.tag || '')));
+    tagOverlay.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  });
+  document.getElementById('tagOverlayMask').addEventListener('click', function() {
+    tagOverlay.style.display = 'none';
+    document.body.style.overflow = '';
+  });
+  document.getElementById('tagOverlayClose').addEventListener('click', function() {
+    tagOverlay.style.display = 'none';
+    document.body.style.overflow = '';
+  });
+  chips.forEach(chip => chip.addEventListener('click', function() { chip.classList.toggle('selected'); }));
+  document.getElementById('tagReset').addEventListener('click', function() { chips.forEach(c => c.classList.remove('selected')); });
+  document.getElementById('tagConfirm').addEventListener('click', function() {
+    selectedTags = [];
+    chips.forEach(chip => { if (chip.classList.contains('selected')) selectedTags.push(chip.dataset.tag || ''); });
+    updateTagBtnState();
+    tagOverlay.style.display = 'none';
+    document.body.style.overflow = '';
+    filterProducts();
+  });
+</script>

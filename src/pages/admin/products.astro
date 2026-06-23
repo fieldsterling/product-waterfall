@@ -1,0 +1,333 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import { IMAGE_BASE } from '../../site-config';
+
+const allProducts = await getCollection('products');
+const allStores = await getCollection('stores');
+
+const categories = [...new Set(allProducts.map((p) => p.data.category))].sort();
+const storeNames = [...new Set(allStores.map((s) => s.data.name))].sort();
+
+const productsList = allProducts.map((p) => ({
+  id: p.id,
+  title: p.data.title,
+  code: p.data.code || '',
+  category: p.data.category,
+  image: p.data.image,
+  tags: p.data.tags,
+  priceMin: p.data.priceMin,
+  priceMax: p.data.priceMax,
+  boost: p.data.boost,
+}));
+
+const API_BASE = import.meta.env.PROD ? '/.netlify/functions' : 'http://localhost:8888/.netlify/functions';
+---
+
+<BaseLayout title="产品编辑 - 管理">
+  <div id="loginBox" class="login-box">
+    <h2 class="login-title">产品编辑</h2>
+    <input type="password" id="tokenInput" class="login-input" placeholder="请输入管理密码" />
+    <button id="loginBtn" class="login-btn">进入</button>
+    <p class="login-msg" id="loginMsg"></p>
+  </div>
+
+  <div id="contentBox" class="content-box" style="display:none">
+    <header class="header">
+      <a href="/admin/" class="back-link">← 返回管理</a>
+      <button id="newBtn" class="new-btn">+ 新建产品</button>
+    </header>
+
+    <div class="product-list" id="productList">
+      {productsList.map((p) => (
+        <div class="product-item" data-id={p.id}>
+          <div class="product-item-img"><img src={p.image && (p.image.startsWith('http') ? p.image : IMAGE_BASE + p.image.replace(/^\//, ''))} alt={p.title} loading="lazy" /></div>
+          <div class="product-item-info">
+            <span class="product-item-title">{p.title}</span>
+            <span class="product-item-code">{p.code || '-'}</span>
+          </div>
+          <button class="edit-btn" data-id={p.id}>编辑</button>
+        </div>
+      ))}
+    </div>
+
+    <div id="editForm" class="edit-form" style="display:none">
+      <h3 class="form-title" id="formTitle">编辑产品</h3>
+      <input type="hidden" id="editSlug" />
+      <div class="form-row">
+        <label class="form-label">产品名称 *</label>
+        <input type="text" id="editTitle" class="form-input" required />
+      </div>
+      <div class="form-row">
+        <label class="form-label">图片URL *</label>
+        <input type="text" id="editImage" class="form-input" required />
+      </div>
+      <div class="form-row form-row-half">
+        <div class="form-col">
+          <label class="form-label">产品编号</label>
+          <input type="text" id="editCode" class="form-input" />
+        </div>
+        <div class="form-col">
+          <label class="form-label">分类 *</label>
+          <input type="text" id="editCategory" class="form-input" list="categoryList" required />
+          <datalist id="categoryList">
+            {categories.map((c) => <option value={c} />)}
+          </datalist>
+        </div>
+      </div>
+      <div class="form-row form-row-half">
+        <div class="form-col">
+          <label class="form-label">价格下限</label>
+          <input type="number" id="editPriceMin" class="form-input" step="0.01" />
+        </div>
+        <div class="form-col">
+          <label class="form-label">价格上限</label>
+          <input type="number" id="editPriceMax" class="form-input" step="0.01" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">标签（逗号分隔）</label>
+        <input type="text" id="editTags" class="form-input" placeholder="黄金, 手镯, 古法" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">门店 *</label>
+        <input type="text" id="editStore" class="form-input" list="storeList" required />
+        <datalist id="storeList">
+          {storeNames.map((s) => <option value={s} />)}
+        </datalist>
+      </div>
+      <div class="form-row">
+        <label class="form-label form-check">
+          <input type="checkbox" id="editBoost" />
+          加强推广
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="form-label">图文介绍（Markdown）</label>
+        <textarea id="editContent" class="form-textarea" rows="10" placeholder="支持 Markdown 格式"></textarea>
+      </div>
+      <div class="form-actions">
+        <button id="cancelBtn" class="action-btn action-btn-secondary">取消</button>
+        <button id="saveBtn" class="action-btn action-btn-primary">保存</button>
+      </div>
+      <p class="form-msg" id="saveMsg"></p>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .login-box {
+    max-width: 360px; margin: 80px auto 0; padding: 32px 20px;
+    background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .login-title { font-size: 18px; font-weight: 600; text-align: center; margin-bottom: 20px; }
+  .login-input { width: 100%; height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 15px; outline: none; }
+  .login-input:focus { border-color: var(--primary); }
+  .login-btn { width: 100%; height: 44px; margin-top: 14px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 16px; cursor: pointer; }
+  .login-msg { font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; color: #e74c3c; }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .back-link { font-size: 14px; color: var(--primary); }
+  .new-btn { padding: 6px 16px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; }
+
+  .product-list { padding: 0; }
+  .product-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);
+  }
+  .product-item-img { width: 48px; height: 48px; border-radius: 4px; overflow: hidden; background: #eee; flex-shrink: 0; }
+  .product-item-img img { width: 100%; height: 100%; object-fit: cover; }
+  .product-item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .product-item-title { font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .product-item-code { font-size: 12px; color: var(--text-muted); }
+  .edit-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer; flex-shrink: 0; }
+
+  .edit-form { padding: 16px; background: var(--card-bg); }
+  .form-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+  .form-row { margin-bottom: 14px; }
+  .form-row-half { display: flex; gap: 12px; }
+  .form-col { flex: 1; min-width: 0; }
+  .form-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .form-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .form-check input { width: auto; margin: 0; }
+  .form-input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); }
+  .form-input:focus { border-color: var(--primary); }
+  .form-textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); resize: vertical; font-family: inherit; }
+  .form-textarea:focus { border-color: var(--primary); }
+  .form-actions { display: flex; gap: 10px; }
+  .action-btn { flex: 1; height: 42px; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; }
+  .action-btn-primary { background: var(--primary); color: #fff; }
+  .action-btn-secondary { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
+  .action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .form-msg { font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+  .form-msg.success { color: #27ae60; }
+  .form-msg.error { color: #e74c3c; }
+</style>
+
+<script define:vars={{ apiBase: API_BASE, productsData: JSON.stringify(productsList) }}>
+  var tokenInput = document.getElementById('tokenInput');
+  var loginBtn = document.getElementById('loginBtn');
+  var loginMsg = document.getElementById('loginMsg');
+  var loginBox = document.getElementById('loginBox');
+  var contentBox = document.getElementById('contentBox');
+
+  var savedToken = sessionStorage.getItem('admin_token');
+  if (savedToken) {
+    loginBox.style.display = 'none';
+    contentBox.style.display = 'block';
+  }
+
+  loginBtn.addEventListener('click', function() {
+    var token = tokenInput.value.trim();
+    if (!token) { loginMsg.textContent = '请输入密码'; return; }
+    // Verify by trying to fetch comments
+    fetch(apiBase + '/comments?token=' + encodeURIComponent(token))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) {
+          loginMsg.textContent = '密码错误';
+          return;
+        }
+        sessionStorage.setItem('admin_token', token);
+        loginBox.style.display = 'none';
+        contentBox.style.display = 'block';
+      })
+      .catch(function() { loginMsg.textContent = '网络错误'; });
+  });
+
+  tokenInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loginBtn.click();
+  });
+
+  // ===== 编辑逻辑 =====
+  var products = JSON.parse(productsData);
+  var editForm = document.getElementById('editForm');
+  var productList = document.getElementById('productList');
+  var formTitle = document.getElementById('formTitle');
+  var isNew = false;
+
+  document.getElementById('newBtn').addEventListener('click', function() {
+    isNew = true;
+    formTitle.textContent = '新建产品';
+    clearForm();
+    productList.style.display = 'none';
+    editForm.style.display = 'block';
+  });
+
+  document.querySelectorAll('.edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.dataset.id;
+      var p = products.find(function(x) { return x.id === id; });
+      if (!p) return;
+      isNew = false;
+      formTitle.textContent = '编辑 ' + p.title;
+      document.getElementById('editSlug').value = p.id;
+      document.getElementById('editTitle').value = p.title || '';
+      document.getElementById('editImage').value = p.image || '';
+      document.getElementById('editCode').value = p.code || '';
+      document.getElementById('editCategory').value = p.category || '';
+      document.getElementById('editPriceMin').value = p.priceMin != null ? p.priceMin : '';
+      document.getElementById('editPriceMax').value = p.priceMax != null ? p.priceMax : '';
+      document.getElementById('editTags').value = (p.tags || []).join(', ');
+      document.getElementById('editStore').value = p.category || '';
+      document.getElementById('editBoost').checked = p.boost || false;
+      document.getElementById('editContent').value = '';
+      productList.style.display = 'none';
+      editForm.style.display = 'block';
+    });
+  });
+
+  document.getElementById('cancelBtn').addEventListener('click', function() {
+    productList.style.display = 'block';
+    editForm.style.display = 'none';
+  });
+
+  function clearForm() {
+    document.getElementById('editSlug').value = '';
+    document.getElementById('editTitle').value = '';
+    document.getElementById('editImage').value = '';
+    document.getElementById('editCode').value = '';
+    document.getElementById('editCategory').value = '';
+    document.getElementById('editPriceMin').value = '';
+    document.getElementById('editPriceMax').value = '';
+    document.getElementById('editTags').value = '';
+    document.getElementById('editStore').value = '';
+    document.getElementById('editBoost').checked = false;
+    document.getElementById('editContent').value = '';
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', function() {
+    var token = sessionStorage.getItem('admin_token');
+    if (!token) { alert('请先登录'); return; }
+
+    var title = document.getElementById('editTitle').value.trim();
+    var store = document.getElementById('editStore').value.trim();
+    if (!title || !store) { showMsg('产品名称和门店为必填'); return; }
+
+    // Generate slug from title or use existing
+    var slug = isNew ? slugify(title) : document.getElementById('editSlug').value;
+    if (!slug) { showMsg('无法生成产品ID'); return; }
+
+    var saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    var data = {
+      title: title,
+      image: document.getElementById('editImage').value.trim(),
+      category: document.getElementById('editCategory').value.trim(),
+      store: store,
+      code: document.getElementById('editCode').value.trim(),
+      tags: document.getElementById('editTags').value,
+      priceMin: document.getElementById('editPriceMin').value,
+      priceMax: document.getElementById('editPriceMax').value,
+      boost: document.getElementById('editBoost').checked,
+      content: document.getElementById('editContent').value,
+    };
+
+    // Convert price strings to numbers
+    if (data.priceMin !== '') data.priceMin = Number(data.priceMin);
+    else delete data.priceMin;
+    if (data.priceMax !== '') data.priceMax = Number(data.priceMax);
+    else delete data.priceMax;
+
+    fetch(apiBase + '/save-content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify({ type: 'product', slug: slug, data: data }),
+    }).then(function(r) { return r.json(); }).then(function(result) {
+      if (result.success) {
+        showMsg('保存成功！Slug: ' + slug, true);
+        if (isNew) {
+          document.getElementById('editSlug').value = slug;
+          isNew = false;
+        }
+      } else {
+        showMsg(result.error || '保存失败');
+      }
+    }).catch(function() {
+      showMsg('网络错误');
+    }).finally(function() {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    });
+  });
+
+  function showMsg(text, success) {
+    var el = document.getElementById('saveMsg');
+    el.textContent = text;
+    el.className = 'form-msg' + (success ? ' success' : ' error');
+  }
+
+  function slugify(text) {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      || 'product-' + Date.now();
+  }
+</script>

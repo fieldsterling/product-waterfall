@@ -1,0 +1,333 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import { IMAGE_BASE } from '../../site-config';
+
+const allStores = await getCollection('stores');
+
+const storesList = allStores.map((s) => ({
+  id: s.id,
+  name: s.data.name,
+  images: s.data.images,
+  tags: s.data.tags,
+  address: s.data.address,
+  phone: s.data.phone,
+  wechat: s.data.wechat,
+  closed: s.data.closed,
+  floor: s.data.floor,
+  lat: s.data.lat,
+  lng: s.data.lng,
+}));
+
+const API_BASE = import.meta.env.PROD ? '/.netlify/functions' : 'http://localhost:8888/.netlify/functions';
+---
+
+<BaseLayout title="门店编辑 - 管理">
+  <div id="loginBox" class="login-box">
+    <h2 class="login-title">门店编辑</h2>
+    <input type="password" id="tokenInput" class="login-input" placeholder="请输入管理密码" />
+    <button id="loginBtn" class="login-btn">进入</button>
+    <p class="login-msg" id="loginMsg"></p>
+  </div>
+
+  <div id="contentBox" class="content-box" style="display:none">
+    <header class="header">
+      <a href="/admin/" class="back-link">← 返回管理</a>
+      <button id="newBtn" class="new-btn">+ 新建门店</button>
+    </header>
+
+    <div class="store-list" id="storeList">
+      {storesList.map((s) => (
+        <div class="store-item" data-id={s.id}>
+          <div class="store-item-img">
+            {s.images.length > 0 ? <img src={s.images[0] && (s.images[0].startsWith('http') ? s.images[0] : IMAGE_BASE + s.images[0].replace(/^\//, ''))} alt={s.name} loading="lazy" /> : <div class="no-img">无图</div>}
+          </div>
+          <div class="store-item-info">
+            <span class="store-item-name">{s.name}</span>
+            <span class="store-item-sub">{s.address || '-'}</span>
+          </div>
+          {s.closed && <span class="closed-tag">已闭店</span>}
+          <button class="edit-btn" data-id={s.id}>编辑</button>
+        </div>
+      ))}
+    </div>
+
+    <div id="editForm" class="edit-form" style="display:none">
+      <h3 class="form-title" id="formTitle">编辑门店</h3>
+      <input type="hidden" id="editSlug" />
+      <div class="form-row">
+        <label class="form-label">门店名称 *</label>
+        <input type="text" id="editName" class="form-input" required />
+      </div>
+      <div class="form-row">
+        <label class="form-label">图片URL（逗号分隔）</label>
+        <input type="text" id="editImages" class="form-input" placeholder="https://..., https://..." />
+      </div>
+      <div class="form-row">
+        <label class="form-label">标签（逗号分隔）</label>
+        <input type="text" id="editTags" class="form-input" placeholder="珠宝, 黄金" />
+      </div>
+      <div class="form-row">
+        <label class="form-label">地址</label>
+        <input type="text" id="editAddress" class="form-input" />
+      </div>
+      <div class="form-row form-row-half">
+        <div class="form-col">
+          <label class="form-label">电话</label>
+          <input type="text" id="editPhone" class="form-input" />
+        </div>
+        <div class="form-col">
+          <label class="form-label">微信</label>
+          <input type="text" id="editWechat" class="form-input" />
+        </div>
+      </div>
+      <div class="form-row form-row-half">
+        <div class="form-col">
+          <label class="form-label">楼层</label>
+          <input type="text" id="editFloor" class="form-input" placeholder="B1, 1F, 2F" />
+        </div>
+        <div class="form-col">
+          <label class="form-label form-check">
+            <input type="checkbox" id="editClosed" />
+            已闭店
+          </label>
+        </div>
+      </div>
+      <div class="form-row form-row-half">
+        <div class="form-col">
+          <label class="form-label">纬度 Lat</label>
+          <input type="number" id="editLat" class="form-input" step="any" />
+        </div>
+        <div class="form-col">
+          <label class="form-label">经度 Lng</label>
+          <input type="number" id="editLng" class="form-input" step="any" />
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">图文介绍（Markdown）</label>
+        <textarea id="editContent" class="form-textarea" rows="10" placeholder="支持 Markdown 格式"></textarea>
+      </div>
+      <div class="form-actions">
+        <button id="cancelBtn" class="action-btn action-btn-secondary">取消</button>
+        <button id="saveBtn" class="action-btn action-btn-primary">保存</button>
+      </div>
+      <p class="form-msg" id="saveMsg"></p>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .login-box {
+    max-width: 360px; margin: 80px auto 0; padding: 32px 20px;
+    background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .login-title { font-size: 18px; font-weight: 600; text-align: center; margin-bottom: 20px; }
+  .login-input { width: 100%; height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 15px; outline: none; }
+  .login-input:focus { border-color: var(--primary); }
+  .login-btn { width: 100%; height: 44px; margin-top: 14px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 16px; cursor: pointer; }
+  .login-msg { font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; color: #e74c3c; }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .back-link { font-size: 14px; color: var(--primary); }
+  .new-btn { padding: 6px 16px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; }
+
+  .store-list { padding: 0; }
+  .store-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);
+  }
+  .store-item-img { width: 48px; height: 48px; border-radius: 4px; overflow: hidden; background: #eee; flex-shrink: 0; }
+  .store-item-img img { width: 100%; height: 100%; object-fit: cover; }
+  .no-img { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-muted); }
+  .store-item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .store-item-name { font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .store-item-sub { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .closed-tag { font-size: 10px; color: #e74c3c; background: #fde8e8; padding: 1px 6px; border-radius: 3px; flex-shrink: 0; }
+  .edit-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer; flex-shrink: 0; }
+
+  .edit-form { padding: 16px; background: var(--card-bg); }
+  .form-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+  .form-row { margin-bottom: 14px; }
+  .form-row-half { display: flex; gap: 12px; }
+  .form-col { flex: 1; min-width: 0; }
+  .form-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .form-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .form-check input { width: auto; margin: 0; }
+  .form-input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); }
+  .form-input:focus { border-color: var(--primary); }
+  .form-textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; background: var(--bg); resize: vertical; font-family: inherit; }
+  .form-textarea:focus { border-color: var(--primary); }
+  .form-actions { display: flex; gap: 10px; }
+  .action-btn { flex: 1; height: 42px; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; }
+  .action-btn-primary { background: var(--primary); color: #fff; }
+  .action-btn-secondary { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
+  .action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .form-msg { font-size: 13px; text-align: center; margin-top: 10px; min-height: 20px; }
+  .form-msg.success { color: #27ae60; }
+  .form-msg.error { color: #e74c3c; }
+</style>
+
+<script define:vars={{ apiBase: API_BASE, storesData: JSON.stringify(storesList) }}>
+  var tokenInput = document.getElementById('tokenInput');
+  var loginBtn = document.getElementById('loginBtn');
+  var loginMsg = document.getElementById('loginMsg');
+  var loginBox = document.getElementById('loginBox');
+  var contentBox = document.getElementById('contentBox');
+
+  var savedToken = sessionStorage.getItem('admin_token');
+  if (savedToken) {
+    loginBox.style.display = 'none';
+    contentBox.style.display = 'block';
+  }
+
+  loginBtn.addEventListener('click', function() {
+    var token = tokenInput.value.trim();
+    if (!token) { loginMsg.textContent = '请输入密码'; return; }
+    fetch(apiBase + '/comments?token=' + encodeURIComponent(token))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) {
+          loginMsg.textContent = '密码错误';
+          return;
+        }
+        sessionStorage.setItem('admin_token', token);
+        loginBox.style.display = 'none';
+        contentBox.style.display = 'block';
+      })
+      .catch(function() { loginMsg.textContent = '网络错误'; });
+  });
+
+  tokenInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loginBtn.click();
+  });
+
+  // ===== 编辑逻辑 =====
+  var stores = JSON.parse(storesData);
+  var editForm = document.getElementById('editForm');
+  var storeList = document.getElementById('storeList');
+  var formTitle = document.getElementById('formTitle');
+  var isNew = false;
+
+  document.getElementById('newBtn').addEventListener('click', function() {
+    isNew = true;
+    formTitle.textContent = '新建门店';
+    clearForm();
+    storeList.style.display = 'none';
+    editForm.style.display = 'block';
+  });
+
+  document.querySelectorAll('.edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.dataset.id;
+      var s = stores.find(function(x) { return x.id === id; });
+      if (!s) return;
+      isNew = false;
+      formTitle.textContent = '编辑 ' + s.name;
+      document.getElementById('editSlug').value = s.id;
+      document.getElementById('editName').value = s.name || '';
+      document.getElementById('editImages').value = (s.images || []).join(', ');
+      document.getElementById('editTags').value = (s.tags || []).join(', ');
+      document.getElementById('editAddress').value = s.address || '';
+      document.getElementById('editPhone').value = s.phone || '';
+      document.getElementById('editWechat').value = s.wechat || '';
+      document.getElementById('editFloor').value = s.floor || '';
+      document.getElementById('editClosed').checked = s.closed || false;
+      document.getElementById('editLat').value = s.lat != null ? s.lat : '';
+      document.getElementById('editLng').value = s.lng != null ? s.lng : '';
+      document.getElementById('editContent').value = '';
+      storeList.style.display = 'none';
+      editForm.style.display = 'block';
+    });
+  });
+
+  document.getElementById('cancelBtn').addEventListener('click', function() {
+    storeList.style.display = 'block';
+    editForm.style.display = 'none';
+  });
+
+  function clearForm() {
+    document.getElementById('editSlug').value = '';
+    document.getElementById('editName').value = '';
+    document.getElementById('editImages').value = '';
+    document.getElementById('editTags').value = '';
+    document.getElementById('editAddress').value = '';
+    document.getElementById('editPhone').value = '';
+    document.getElementById('editWechat').value = '';
+    document.getElementById('editFloor').value = '';
+    document.getElementById('editClosed').checked = false;
+    document.getElementById('editLat').value = '';
+    document.getElementById('editLng').value = '';
+    document.getElementById('editContent').value = '';
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', function() {
+    var token = sessionStorage.getItem('admin_token');
+    if (!token) { alert('请先登录'); return; }
+
+    var name = document.getElementById('editName').value.trim();
+    if (!name) { showMsg('门店名称为必填'); return; }
+
+    var slug = isNew ? slugify(name) : document.getElementById('editSlug').value;
+    if (!slug) { showMsg('无法生成门店ID'); return; }
+
+    var saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+
+    var data = {
+      name: name,
+      images: document.getElementById('editImages').value,
+      tags: document.getElementById('editTags').value,
+      address: document.getElementById('editAddress').value.trim(),
+      phone: document.getElementById('editPhone').value.trim(),
+      wechat: document.getElementById('editWechat').value.trim(),
+      floor: document.getElementById('editFloor').value.trim(),
+      closed: document.getElementById('editClosed').checked,
+      lat: document.getElementById('editLat').value,
+      lng: document.getElementById('editLng').value,
+      content: document.getElementById('editContent').value,
+    };
+
+    if (data.lat !== '') data.lat = Number(data.lat); else delete data.lat;
+    if (data.lng !== '') data.lng = Number(data.lng); else delete data.lng;
+
+    fetch(apiBase + '/save-content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
+      body: JSON.stringify({ type: 'store', slug: slug, data: data }),
+    }).then(function(r) { return r.json(); }).then(function(result) {
+      if (result.success) {
+        showMsg('保存成功！Slug: ' + slug, true);
+        if (isNew) {
+          document.getElementById('editSlug').value = slug;
+          isNew = false;
+        }
+      } else {
+        showMsg(result.error || '保存失败');
+      }
+    }).catch(function() {
+      showMsg('网络错误');
+    }).finally(function() {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    });
+  });
+
+  function showMsg(text, success) {
+    var el = document.getElementById('saveMsg');
+    el.textContent = text;
+    el.className = 'form-msg' + (success ? ' success' : ' error');
+  }
+
+  function slugify(text) {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      || 'store-' + Date.now();
+  }
+</script>
