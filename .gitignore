@@ -1,5 +1,8 @@
 # build output
 dist/
+
+# images - stored in COS
+public/images/
 # generated types
 .astro/
 

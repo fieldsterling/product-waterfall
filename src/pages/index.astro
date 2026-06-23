@@ -5,6 +5,9 @@ import { IMAGE_BASE } from '../site-config';
 
 const allProducts = await getCollection('products');
 
+// 获取 IMAGE_BASE 用于客户端
+const imageBaseUrl = IMAGE_BASE;
+
 const categories = [...new Set(allProducts.map((p) => p.data.category))].sort();
 const stores = [...new Set(allProducts.map((p) => p.data.store))].sort();
 const allTags = [...new Set(allProducts.flatMap((p) => p.data.tags))].sort();
@@ -189,12 +192,12 @@ const productsData = allProducts.map((p) => ({
   .tag-confirm-btn { flex: 1; height: 38px; border: none; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; }
 </style>
 
-<script define:vars={{ productsData, IMAGE_BASE }}>
+<script define:vars={{ productsData, imageBaseUrl }}>
   // ========== 全局变量提前声明 ==========
   var selectedTags = [];
 
   // ========== 配置 ==========
-  var imgBase = IMAGE_BASE;
+  var imgBase = imageBaseUrl;
   var config = {
     weights: { interest: 0.5, boost: 0.3, random: 0.2 },
     behavior: { clickWeight: 1, likeWeight: 2 }
